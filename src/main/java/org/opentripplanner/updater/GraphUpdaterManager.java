@@ -188,4 +188,8 @@ public class GraphUpdaterManager {
         if (id >= updaterList.size()) return null;
         return updaterList.get(id);
     }
+
+    public List<GraphUpdater> getUpdaterList() {
+        return updaterList;
+    }
 }

@@ -51,7 +51,8 @@ public class TripTimeShort {
         departureDelay     = tt.getDepartureDelay(i);
         timepoint          = tt.isTimepoint(i);
         realtime           = !tt.isScheduled();
-        realtimeState      = tt.getRealTimeState();
+        tripId             = tt.trip.getId();
+        realtimeState      = tt.isTimeCanceled(i) ? RealTimeState.CANCELED : tt.getRealTimeState();
         blockId            = tt.trip.getBlockId();
         headsign           = tt.getHeadsign(i);
         continuousPickup   = tt.getContinuousPickup(i);
@@ -62,19 +63,30 @@ public class TripTimeShort {
 
     public TripTimeShort(TripTimes tt, int i, Stop stop, ServiceDay sd) {
         this(tt, i, stop);
-        tripId = tt.trip.getId();
+        if (sd != null) {
         serviceDay = sd.time(0);
     }
+    }
+
 
     /**
      * must pass in both table and trip, because tripTimes do not have stops.
      */
     public static List<TripTimeShort> fromTripTimes (Timetable table, Trip trip) {
+        return fromTripTimes(table, trip, null);
+    }
+
+    /**
+     * must pass in both table and trip, because tripTimes do not have stops.
+     * @param serviceDay service day to set, if null none is set
+     */
+    public static List<TripTimeShort> fromTripTimes(Timetable table, Trip trip,
+        ServiceDay serviceDay) {
         TripTimes times = table.getTripTimes(table.getTripIndex(trip.getId()));        
         List<TripTimeShort> out = Lists.newArrayList();
         // one per stop, not one per hop, thus the <= operator
         for (int i = 0; i < times.getNumStops(); ++i) {
-            out.add(new TripTimeShort(times, i, table.pattern.getStop(i)));
+            out.add(new TripTimeShort(times, i, table.pattern.getStop(i), serviceDay));
         }
         return out;
     }

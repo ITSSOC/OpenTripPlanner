@@ -58,8 +58,7 @@ public class GtfsLibrary {
         return route.getLongName();
     }
 
-    public static TraverseMode getTraverseMode(Route route) {
-        int routeType = route.getType();
+    public static TraverseMode getTraverseMode(int routeType) {
         /* TPEG Extension  https://groups.google.com/d/msg/gtfs-changes/keT5rTPS7Y0/71uMz2l6ke0J */
         if (routeType >= 100 && routeType < 200) { // Railway Service
             return TraverseMode.RAIL;
@@ -113,6 +112,12 @@ public class GtfsLibrary {
         default:
             throw new IllegalArgumentException("unknown gtfs route type " + routeType);
         }
+    }
+
+    public static TraverseMode getTraverseMode(Route route) {
+        int routeType = route.getType();
+
+        return getTraverseMode(routeType);
     }
 
     private static class GtfsContextImpl implements GtfsContext {

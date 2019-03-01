@@ -23,17 +23,17 @@ import javax.ws.rs.core.Response;
 @Produces(MediaType.APPLICATION_JSON)
 public class GeocoderResource {
 
-    private final LuceneIndex index;
+    private final LuceneIndex index = null;
 
     public GeocoderResource (@Context OTPServer otpServer, @PathParam("routerId") String routerId) {
         Router router = otpServer.getRouter(routerId);
         GraphIndex graphIndex = router.graph.index;
         synchronized (graphIndex) {
-            if (graphIndex.luceneIndex == null) {
-                // Synchronously lazy-initialize the Lucene index
-                graphIndex.luceneIndex = new LuceneIndex(graphIndex, otpServer.basePath, false);
-            }
-            index = graphIndex.luceneIndex;
+//            if (graphIndex.luceneIndex == null) {
+//                // Synchronously lazy-initialize the Lucene index
+//                graphIndex.luceneIndex = new LuceneIndex(graphIndex, otpServer.basePath, false);
+//            }
+//            index = graphIndex.luceneIndex;
         }
     }
 

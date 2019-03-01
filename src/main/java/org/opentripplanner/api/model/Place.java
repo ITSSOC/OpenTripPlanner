@@ -106,6 +106,12 @@ public class Place {
     public EncodedPolylineBean flagStopArea;
 
     /**
+     * In case the vertex is of a parking type.
+     */
+    public String bikeParkId;
+    public String carParkId;
+
+    /**
      * Returns the geometry in GeoJSON format
      * @return
      */

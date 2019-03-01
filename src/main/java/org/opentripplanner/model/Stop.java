@@ -36,6 +36,8 @@ public final class Stop extends IdentityBean<FeedScopedId> {
     private int vehicleType = MISSING_VALUE;
 
     private String platformCode;
+    
+    private String brand;
 
     public Stop() {
 
@@ -191,4 +193,12 @@ public final class Stop extends IdentityBean<FeedScopedId> {
     public void setPlatformCode(String platformCode) {
         this.platformCode = platformCode;
     }
+
+	public String getBrand() {
+		return brand;
+	}
+
+	public void setBrand(String brand) {
+		this.brand = brand;
+	}
 }

@@ -247,8 +247,8 @@ public abstract class GraphPathToTripPlanConverter {
         List<int[]> legsIndexes = new ArrayList<int[]>();
 
         for (int i = 1; i < states.length - 1; i++) {
-            TraverseMode backMode = states[i].getBackMode();
-            TraverseMode forwardMode = states[i + 1].getBackMode();
+            TraverseMode backMode = states[i].getBackMode() != null ? states[i].getBackMode() : states[i].getBackState().getNonTransitMode();
+            TraverseMode forwardMode = states[i + 1].getBackMode() != null ? states[i + 1].getBackMode() : states[i + 1].getBackState().getNonTransitMode();
 
             if (backMode == null || forwardMode == null) continue;
 
@@ -261,7 +261,12 @@ public abstract class GraphPathToTripPlanConverter {
                     if (legIndexPairs[1] != states.length - 1) {
                         legsIndexes.add(legIndexPairs);
                     }
-                    legIndexPairs = new int[] {i, states.length - 1};
+                    if (states[i - 1].getBackEdge() instanceof LegSwitchingEdge) {
+                        // Include from from LegSwitchingEdge
+                        legIndexPairs = new int[] {i-1, states.length - 1};
+                    } else {
+                        legIndexPairs = new int[] {i, states.length - 1};
+                    }
                 }
             } else if (backMode != forwardMode) {                       // Mode change => leg switch
                 legIndexPairs[1] = i;
@@ -742,7 +747,13 @@ public abstract class GraphPathToTripPlanConverter {
             LOG.trace("Added bike share Id {} to place", place.bikeShareId);
             place.vertexType = VertexType.BIKESHARE;
         } else if (vertex instanceof BikeParkVertex) {
+            place.bikeParkId = ((BikeParkVertex) vertex).getId();
+            LOG.trace("Added bike parking Id {} to place", place.bikeParkId);
             place.vertexType = VertexType.BIKEPARK;
+        } else if (vertex instanceof ParkAndRideVertex) {
+            place.carParkId = ((ParkAndRideVertex) vertex).getId();
+            LOG.trace("Added bike parking Id {} to place", place.bikeParkId);
+            place.vertexType = VertexType.PARKANDRIDE;
         } else {
             place.vertexType = VertexType.NORMAL;
         }
