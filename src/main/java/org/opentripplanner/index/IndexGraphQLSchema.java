@@ -2365,11 +2365,9 @@ public class IndexGraphQLSchema {
                             if (environment.getArgument("name") == null) {
                                 stream = index.stopForId.values().stream();
                             } else {
-                            	//TODO Cambiar a llamada pelias
-                                stream = index.stopForId.values().stream();
-//                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, true, false, false)
-//                                        .stream()
-//                                        .map(result -> index.stopForId.get(FeedScopedId.convertFromString(result.id)));
+                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, true, false, false, false)
+                                        .stream()
+                                        .map(result -> index.stopForId.get(FeedScopedId.convertFromString(result.id)));
                             }
                             return stream.collect(Collectors.toList());
                         })
@@ -2624,11 +2622,9 @@ public class IndexGraphQLSchema {
                             if (environment.getArgument("name") == null) {
                                 stream = index.stationForId.values().stream();
                             } else {
-                            	//TODO Cambiar a llamada pelias
-                                stream = index.stationForId.values().stream();
-//                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, false, true, false, false)
-//                                        .stream()
-//                                        .map(result -> index.stationForId.get(FeedScopedId.convertFromString(result.id)));
+                                stream = index.getLuceneIndex().query(environment.getArgument("name"), true, false, true, false, false)
+                                        .stream()
+                                        .map(result -> index.stationForId.get(FeedScopedId.convertFromString(result.id)));
                             }
 
                             return stream.collect(Collectors.toList());

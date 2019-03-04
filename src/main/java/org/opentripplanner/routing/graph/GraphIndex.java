@@ -147,6 +147,9 @@ public class GraphIndex {
     private final CalendarService calendarService;
     private final Map<FeedScopedId,Integer> serviceCodes;
 
+    /* Full-text search extensions */
+    public transient LuceneIndex luceneIndex;
+    
     /* Separate transfers for profile routing */
     public Multimap<StopCluster, ProfileTransfer> transfersFromStopCluster;
     private HashGridSpatialIndex<StopCluster> stopClusterSpatialIndex = null;
@@ -275,6 +278,8 @@ public class GraphIndex {
                 flexAreasById.put(id, graph.flexAreasById.get(id));
             }
         }
+        
+        getLuceneIndex();
         
         LOG.info("Done indexing graph.");
     }
@@ -468,6 +473,23 @@ public class GraphIndex {
         List<PlaceAndDistance> results = visitor.placesFound;
         results.sort((pad1, pad2) -> pad1.distance - pad2.distance);
         return results.subList(0, min(results.size(), maxResults));
+    }
+
+    public LuceneIndex getLuceneIndex() {
+        synchronized (this) {
+            if (luceneIndex == null) {
+                File directory;
+                try {
+                    directory = Files.createTempDirectory(graph.routerId + "_lucene",
+                        (FileAttribute<?>[]) new FileAttribute[]{}).toFile();
+                } catch (IOException e) {
+                    return null;
+                }
+                // Synchronously lazy-initialize the Lucene index
+                luceneIndex = new LuceneIndex(this, directory, false);
+            }
+            return luceneIndex;
+        }
     }
 
     public static class StopAndDistance {
