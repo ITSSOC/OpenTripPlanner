@@ -1,6 +1,8 @@
 /* This file is based on code copied from project OneBusAway, see the LICENSE file for further information. */
 package org.opentripplanner.model;
 
+import java.util.List;
+
 public final class Stop extends IdentityBean<FeedScopedId> {
 
     private static final long serialVersionUID = 1L;
@@ -37,7 +39,7 @@ public final class Stop extends IdentityBean<FeedScopedId> {
 
     private String platformCode;
     
-    private String brand;
+    private List<String> brands;
 
     public Stop() {
 
@@ -194,11 +196,12 @@ public final class Stop extends IdentityBean<FeedScopedId> {
         this.platformCode = platformCode;
     }
 
-	public String getBrand() {
-		return brand;
+	public List<String> getBrands() {
+		return brands;
 	}
 
-	public void setBrand(String brand) {
-		this.brand = brand;
+	public void setBrands(List<String> brands) {
+		this.brands = brands;
 	}
+
 }

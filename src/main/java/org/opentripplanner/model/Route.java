@@ -25,6 +25,8 @@ public final class Route extends IdentityBean<FeedScopedId> {
 
     private String textColor;
 
+    private String brand;
+    
     @Deprecated private int routeBikesAllowed = 0;
 
     /**
@@ -171,4 +173,12 @@ public final class Route extends IdentityBean<FeedScopedId> {
     public String toString() {
         return "<Route " + id + " " + shortName + ">";
     }
+
+	public String getBrand() {
+		return brand;
+	}
+
+	public void setBrand(String brand) {
+		this.brand = brand;
+	}
 }

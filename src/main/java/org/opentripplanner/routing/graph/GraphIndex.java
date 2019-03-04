@@ -10,9 +10,12 @@ import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileAttribute;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -62,6 +65,7 @@ import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
 import org.opentripplanner.common.model.GenericLocation;
 import org.opentripplanner.common.model.P2;
 import org.opentripplanner.gtfs.GtfsLibrary;
+import org.opentripplanner.index.BrandIndex;
 import org.opentripplanner.index.FieldErrorInstrumentation;
 import org.opentripplanner.index.IndexGraphQLSchema;
 import org.opentripplanner.index.ResourceConstrainedExecutorServiceExecutionStrategy;
@@ -160,7 +164,13 @@ public class GraphIndex {
 
     public final ExecutorService threadPool;
 
-    public GraphIndex (Graph graph) {
+    public static <T> Predicate<T> distinctByKey(Function<? super T, Object> keyExtractor)
+    {
+        Map<Object, Boolean> map = new ConcurrentHashMap<>();
+        return t -> map.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
+    }
+    
+	public GraphIndex (Graph graph) {
         LOG.info("Indexing graph...");
 
         for (String feedId : graph.getFeedIds()) {
@@ -190,7 +200,6 @@ public class GraphIndex {
             if (vertex instanceof TransitStop) {
                 TransitStop transitStop = (TransitStop) vertex;
                 Stop stop = transitStop.getStop();
-                stop.setBrand("pepito");
                 stopForId.put(stop.getId(), stop);
                 stopVertexForStop.put(stop, transitStop);
                 if (stop.getParentStation() != null) {
@@ -223,9 +232,32 @@ public class GraphIndex {
             }
         }
         for (Route route : patternsForRoute.asMap().keySet()) {
+        	route.setBrand( BrandIndex.getBrand(route.getId()) );
             routeForId.put(route.getId(), route);
         }
 
+        for (Stop stop : stopForId.values()) {
+        	
+            List<Route> routes = patternsForStop.get(stop)
+                    .stream()
+                    .map(pattern -> pattern.route)
+                    .distinct()
+                    .collect(Collectors.toList());
+            
+            List<Route> distictbrandroutes = routes
+            	.stream()
+            	.filter( distinctByKey(p -> p.getBrand()) )
+            	.collect(Collectors.toList());
+
+            List<String> brands = new ArrayList();
+            for (Route route: distictbrandroutes) {
+                
+                brands.add(route.getBrand());
+            }
+
+        	stop.setBrands( brands );
+        }
+        
         // Copy these two service indexes from the graph until we have better ones.
         calendarService = graph.getCalendarService();
         serviceCodes = graph.serviceCodes;
