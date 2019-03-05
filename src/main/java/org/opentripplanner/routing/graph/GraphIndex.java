@@ -9,7 +9,19 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileAttribute;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,43 +34,12 @@ import java.util.stream.Stream;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
-import com.google.common.collect.ArrayListMultimap;
-import java.util.BitSet;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Calendar;
-
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
-import graphql.ExceptionWhileDataFetching;
-import graphql.GraphQLError;
-import graphql.schema.GraphQLSchema;
-
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.lucene.util.PriorityQueue;
+import org.joda.time.LocalDate;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
-import graphql.ExecutionResult;
-import graphql.GraphQL;
-import io.sentry.Sentry;
-import io.sentry.event.Event;
-import io.sentry.event.EventBuilder;
-
-import org.apache.lucene.util.PriorityQueue;
-import org.joda.time.LocalDate;
-import org.opentripplanner.model.Agency;
-import org.opentripplanner.model.FeedScopedId;
-import org.opentripplanner.model.FeedInfo;
-import org.opentripplanner.model.Route;
-import org.opentripplanner.model.Stop;
-import org.opentripplanner.model.Trip;
-import org.opentripplanner.model.calendar.ServiceDate;
-import org.opentripplanner.model.CalendarService;
+import org.opentripplanner.api.model.LocationType;
 import org.opentripplanner.common.LuceneIndex;
 import org.opentripplanner.common.geometry.HashGridSpatialIndex;
 import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
@@ -71,10 +52,17 @@ import org.opentripplanner.index.IndexGraphQLSchema;
 import org.opentripplanner.index.ResourceConstrainedExecutorServiceExecutionStrategy;
 import org.opentripplanner.index.model.StopTimesInPattern;
 import org.opentripplanner.index.model.TripTimeShort;
+import org.opentripplanner.model.Agency;
+import org.opentripplanner.model.CalendarService;
+import org.opentripplanner.model.FeedInfo;
+import org.opentripplanner.model.FeedScopedId;
+import org.opentripplanner.model.Route;
+import org.opentripplanner.model.Stop;
+import org.opentripplanner.model.Trip;
+import org.opentripplanner.model.calendar.ServiceDate;
 import org.opentripplanner.profile.ProfileTransfer;
 import org.opentripplanner.profile.StopCluster;
 import org.opentripplanner.profile.StopClusterMode;
-import org.opentripplanner.profile.StopNameNormalizer;
 import org.opentripplanner.profile.StopTreeCache;
 import org.opentripplanner.routing.alertpatch.AlertPatch;
 import org.opentripplanner.routing.algorithm.AStar;
@@ -109,6 +97,23 @@ import org.opentripplanner.updater.alerts.GtfsRealtimeAlertsUpdater;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import graphql.ExceptionWhileDataFetching;
+import graphql.ExecutionResult;
+import graphql.GraphQL;
+import graphql.GraphQLError;
+import graphql.schema.GraphQLSchema;
+import io.sentry.Sentry;
+import io.sentry.event.Event;
+import io.sentry.event.EventBuilder;
+
 /**
  * This class contains all the transient indexes of graph elements -- those that are not
  * serialized with the graph. Caching these maps is essentially an optimization, but a big one.
@@ -117,7 +122,7 @@ import org.slf4j.LoggerFactory;
 public class GraphIndex {
 
     private static final Logger LOG = LoggerFactory.getLogger(GraphIndex.class);
-    private static final int CLUSTER_RADIUS = 400; // meters
+    private static final int CLUSTER_RADIUS = 4; // meters
 
     /** maximum distance to walk after leaving transit in Analyst */
     public static final int MAX_WALK_METERS = 3500;
@@ -167,6 +172,8 @@ public class GraphIndex {
 
     public final ExecutorService threadPool;
 
+    private BrandIndex brandIndex;
+    
     public static <T> Predicate<T> distinctByKey(Function<? super T, Object> keyExtractor)
     {
         Map<Object, Boolean> map = new ConcurrentHashMap<>();
@@ -234,8 +241,12 @@ public class GraphIndex {
                 }
             }
         }
+        
+        brandIndex = new BrandIndex(graph.routerConfig);
+        brandIndex.buildBrandIndex();
+        
         for (Route route : patternsForRoute.asMap().keySet()) {
-        	route.setBrand( BrandIndex.getBrand(route.getId()) );
+        	route.setBrand( brandIndex.getBrand(route.getId()) );
             routeForId.put(route.getId(), route);
         }
 
@@ -252,7 +263,7 @@ public class GraphIndex {
             	.filter( distinctByKey(p -> p.getBrand()) )
             	.collect(Collectors.toList());
 
-            List<String> brands = new ArrayList();
+            List<String> brands = new ArrayList<String>();
             for (Route route: distictbrandroutes) {
                 
                 brands.add(route.getBrand());
@@ -974,8 +985,12 @@ public class GraphIndex {
 	    // Each stop without a cluster will greedily claim other stops without clusters.
 	    for (Stop s0 : stopForId.values()) {
 	        if (stopClusterForStop.containsKey(s0)) continue; // skip stops that have already been claimed by a cluster
-	        String s0normalizedName = StopNameNormalizer.normalize(s0.getName());
-	        StopCluster cluster = new StopCluster(String.format("C%03d", psIdx++), s0normalizedName);
+	        if (s0.getLocationType() != LocationType.STOP.getValue()) continue;
+	        
+	        String clusterName = s0.getName();
+	        StopCluster cluster = new StopCluster(String.format("C%03d", psIdx++), clusterName);
+	        TraverseMode clusterVehicleMode = getVehicleMode(s0);
+
 	        // LOG.info("stop {}", s0normalizedName);
 	        // No need to explicitly add s0 to the cluster. It will be found in the spatial index query below.
 	        Envelope env = new Envelope(new Coordinate(s0.getLon(), s0.getLat()));
@@ -983,23 +998,62 @@ public class GraphIndex {
 	                SphericalDistanceLibrary.metersToDegrees(CLUSTER_RADIUS));
 	        for (TransitStop ts1 : stopSpatialIndex.query(env)) {
 	            Stop s1 = ts1.getStop();
-	            double geoDistance = SphericalDistanceLibrary.fastDistance(
-	                    s0.getLat(), s0.getLon(), s1.getLat(), s1.getLon());
-	            if (geoDistance < CLUSTER_RADIUS) {
-	                String s1normalizedName = StopNameNormalizer.normalize(s1.getName());
-	                // LOG.info("   --> {}", s1normalizedName);
-	                // LOG.info("       geodist {} stringdist {}", geoDistance, stringDistance);
-	                if (s1normalizedName.equals(s0normalizedName)) {
-	                    // Create a bidirectional relationship between the stop and its cluster
-	                    cluster.children.add(s1);
-	                    stopClusterForStop.put(s1, cluster);
-	                }
+
+	            if (s1.getLocationType() != LocationType.STOP.getValue()) continue;
+	            if ( s1.getWheelchairBoarding() != s0.getWheelchairBoarding() ) continue;
+	            
+	            boolean addToCluster = false;
+	            
+	            if ( s1.getCode() != null && s1.getCode().equalsIgnoreCase( s0.getCode())) { //same stop code
+	            	addToCluster = true;
+	            }else {
+	            	TraverseMode vehicleMode = getVehicleMode(s1);
+	            	
+	            	if ( ( vehicleMode == null || clusterVehicleMode == null) || ( vehicleMode != null && vehicleMode.compareTo(clusterVehicleMode) == 0 ) ) {
+	            		
+	            		double geoDistance = SphericalDistanceLibrary.fastDistance(
+	            				s0.getLat(), s0.getLon(), s1.getLat(), s1.getLon());
+	            		
+	            		if (geoDistance < CLUSTER_RADIUS) {
+	           				addToCluster = true;
+	            		}
+	            	}
 	            }
+	            
+                if (addToCluster) {
+                    // Create a bidirectional relationship between the stop and its cluster
+                    cluster.children.add(s1);
+                    stopClusterForStop.put(s1, cluster);
+                }
 	        }
-	        cluster.computeCenter();
+	        cluster.computeCluster(this);
 	        stopClusterForId.put(cluster.id, cluster);
 	    }
     }
+
+	/**
+	 * Helper function to get vechicle mode from stop. If stop vehicle type is not specified
+	 * guess vehicle mode from list of patterns
+	 */
+	public TraverseMode getVehicleMode(Stop stop) {
+		
+		TraverseMode vehicleMode = null;
+        try {
+        	vehicleMode = GtfsLibrary.getTraverseMode(stop.getVehicleType());
+        } catch (IllegalArgumentException iae) {
+            //If 'vehicleType' is not specified, guess vehicle mode from list of patterns
+        	vehicleMode = patternsForStop.get(stop)
+                    .stream()
+                    .map(pattern -> pattern.mode)
+                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
+                    .entrySet()
+                    .stream()
+                    .max(Comparator.comparing(Map.Entry::getValue))
+                    .map(e -> e.getKey())
+                    .orElse(null);
+        }
+        return vehicleMode;
+	}
 
     /**
      * Rather than using the names and geographic locations of stops to cluster them, group them by their declared

@@ -585,7 +585,7 @@ public class IndexAPI {
      * As such the stop clustering method probably only works right with one or two GTFS data sets in the world.
      */
     @GET
-    @Path("/clusters")
+    @Path("/stopClusters")
     public Response getAllStopClusters () {
         index.clusterStopsAsNeeded();
         // use 'detail' field common to all API methods in this class
@@ -600,8 +600,8 @@ public class IndexAPI {
      * As such the stop clustering method probably only works right with one or two GTFS data sets in the world.
      */
     @GET
-    @Path("/clusters/{clusterId}")
-    public Response getStopCluster (@PathParam("clusterId") String clusterIdString) {
+    @Path("/stopClusters/{stopClusterId}")
+    public Response getStopCluster (@PathParam("stopClusterId") String clusterIdString) {
         index.clusterStopsAsNeeded();
         StopCluster cluster = index.stopClusterForId.get(clusterIdString);
         if (cluster != null) {

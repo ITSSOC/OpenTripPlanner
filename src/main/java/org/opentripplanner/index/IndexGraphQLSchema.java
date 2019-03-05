@@ -47,7 +47,6 @@ import org.opentripplanner.util.model.EncodedPolylineBean;
 
 import java.text.ParseException;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -882,7 +881,7 @@ public class IndexGraphQLSchema {
                 .build();
 
         clusterType = GraphQLObjectType.newObject()
-                .name("Cluster")
+                .name("StopCluster")
                 .description("Cluster is a list of stops grouped by name and proximity")
                 .withInterface(nodeInterface)
                 .field(GraphQLFieldDefinition.newFieldDefinition()
@@ -899,6 +898,11 @@ public class IndexGraphQLSchema {
                         .dataFetcher(environment -> ((StopCluster) environment.getSource()).id)
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("code")
+                        .description("Stop code which is visible at the stop cluster")
+                        .type(Scalars.GraphQLString)
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
                         .name("name")
                         .description("Name of the cluster")
                         .type(new GraphQLNonNull(Scalars.GraphQLString))
@@ -906,21 +910,162 @@ public class IndexGraphQLSchema {
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
                         .name("lat")
-                        .description("Latitude of the center of this cluster (i.e. average latitude of stops in this cluster)")
+                        .description("Latitude of the center of this cluster (i.e. average latitude of stops in this stop cluster)")
                         .type(new GraphQLNonNull(Scalars.GraphQLFloat))
                         .dataFetcher(environment -> (((StopCluster) environment.getSource()).lat))
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
                         .name("lon")
-                        .description("Longitude of the center of this cluster (i.e. average longitude of stops in this cluster)")
+                        .description("Longitude of the center of this cluster (i.e. average longitude of stops in this stop cluster)")
                         .type(new GraphQLNonNull(Scalars.GraphQLFloat))
                         .dataFetcher(environment -> (((StopCluster) environment.getSource()).lon))
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
-                        .name("stops")
-                        .description("List of stops in the cluster")
-                        .type(new GraphQLList(new GraphQLNonNull(stopType)))
-                        .dataFetcher(environment -> ((StopCluster) environment.getSource()).children)
+                		.name("stops")
+                		.description("List of stops in the cluster")
+                		.type(new GraphQLList(new GraphQLNonNull(stopType)))
+                		.dataFetcher(environment -> ((StopCluster) environment.getSource()).children)
+                		.build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("brands")
+                        .description("Cluster brands")
+                        .type(new GraphQLList(Scalars.GraphQLString))
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("wheelchairBoarding")
+                        .description("Whether wheelchair boarding is possible for at least some of vehicles on this stop cluster")
+                        .type(wheelchairBoardingEnum)
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("vehicleMode")
+                        .description("Transport mode (e.g. `BUS`) used by routes which pass through this stop or `null` if mode cannot be determined, e.g. in case no routes pass through the stop cluster.  \n Note that also other types of vehicles may use the stop, e.g. tram replacement buses might use stops which have `TRAM` as their mode.")
+                        .type(modeEnum)
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("routes")
+                        .description("Routes which pass through this stop cluster")
+                        .type(new GraphQLList(new GraphQLNonNull(routeType)))
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("patterns")
+                        .description("Patterns which pass through this stop cluster")
+                        .type(new GraphQLList(patternType))
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("stoptimesForPatterns")
+                        .description("Returns list of stoptimes (arrivals and departures) at this stop, grouped by patterns")
+                        .type(new GraphQLList(stoptimesInPatternType))
+                        .argument(GraphQLArgument.newArgument()
+                                .name("startTime")
+                                .description("Return departures after this time. Format: Unix timestamp in seconds. Default value: current time")
+                                .type(Scalars.GraphQLLong)
+                                .defaultValue(0L) // Default value is current time
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("timeRange")
+                                .description("Return stoptimes within this time range, starting from `startTime`. Unit: Seconds")
+                                .type(Scalars.GraphQLInt)
+                                .defaultValue(24 * 60 * 60)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("numberOfDepartures")
+                                .type(Scalars.GraphQLInt)
+                                .defaultValue(5)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("omitNonPickups")
+                                .description("If true, only those departures which allow boarding are returned")
+                                .type(Scalars.GraphQLBoolean)
+                                .defaultValue(false)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("omitCanceled")
+                                .description("If false, returns also canceled trips")
+                                .type(Scalars.GraphQLBoolean)
+                                .defaultValue(true)
+                                .build())
+                        .dataFetcher(environment -> {
+                            StopCluster cluster = environment.getSource();
+                            return cluster.children
+                                    .stream()
+                                    .flatMap(singleStop ->
+                                            index.stopTimesForStop(singleStop,
+                                                    environment.getArgument("startTime"),
+                                                    environment.getArgument("timeRange"),
+                                                    environment.getArgument("numberOfDepartures"),
+                                                    environment.getArgument("omitNonPickups"),
+                                                    environment.getArgument("omitCanceled"))
+                                                    .stream()
+                                    )
+                                    .collect(Collectors.toList());
+                        })
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("stoptimesWithoutPatterns")
+                        .description("Returns list of stoptimes (arrivals and departures) at this stop")
+                        .type(new GraphQLList(stoptimeType))
+                        .argument(GraphQLArgument.newArgument()
+                                .name("startTime")
+                                .description("Return departures after this time. Format: Unix timestamp in seconds. Default value: current time")
+                                .type(Scalars.GraphQLLong)
+                                .defaultValue(0L) // Default value is current time
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("timeRange")
+                                .description("Return stoptimes within this time range, starting from `startTime`. Unit: Seconds")
+                                .type(Scalars.GraphQLInt)
+                                .defaultValue(24 * 60 * 60)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("numberOfDepartures")
+                                .type(Scalars.GraphQLInt)
+                                .defaultValue(5)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("omitNonPickups")
+                                .description("If true, only those departures which allow boarding are returned")
+                                .type(Scalars.GraphQLBoolean)
+                                .defaultValue(false)
+                                .build())
+                        .argument(GraphQLArgument.newArgument()
+                                .name("omitCanceled")
+                                .description("If false, returns also canceled trips")
+                                .type(Scalars.GraphQLBoolean)
+                                .defaultValue(true)
+                                .build())
+                        .dataFetcher(environment -> {
+                            StopCluster cluster = environment.getSource();
+                            Stream<StopTimesInPattern> stream;
+                            stream = cluster.children
+                                    .stream()
+                                    .flatMap(singleStop ->
+                                            index.stopTimesForStop(singleStop,
+                                                    environment.getArgument("startTime"),
+                                                    environment.getArgument("timeRange"),
+                                                    environment.getArgument("numberOfDepartures"),
+                                                    environment.getArgument("omitNonPickups"),
+                                                    environment.getArgument("omitCanceled"))
+                                                    .stream()
+                                        );
+                            return stream.flatMap(stoptimesWithPattern -> stoptimesWithPattern.times.stream())
+                                    .sorted(Comparator.comparing(t -> t.serviceDay + t.realtimeDeparture))
+                                    .limit((long) (int) environment.getArgument("numberOfDepartures"))
+                                    .collect(Collectors.toList());
+                        })
+                        .build())
+                .field(GraphQLFieldDefinition.newFieldDefinition()
+                        .name("alerts")
+                        .description("List of alerts which have an effect on this stop cluster")
+                        .type(new GraphQLList(alertType))
+                        .dataFetcher(environment -> {
+                            StopCluster cluster = environment.getSource();
+                            return cluster.children
+                                    .stream()
+                                    .flatMap(singleStop ->
+                                    		index.getAlertsForStop(singleStop).stream()
+                                    )
+                                    .collect(Collectors.toList());
+                        })
                         .build())
                 .build();
 
@@ -1063,22 +1208,23 @@ public class IndexGraphQLSchema {
                         .name("vehicleMode")
                         .description("Transport mode (e.g. `BUS`) used by routes which pass through this stop or `null` if mode cannot be determined, e.g. in case no routes pass through the stop.  \n Note that also other types of vehicles may use the stop, e.g. tram replacement buses might use stops which have `TRAM` as their mode.")
                         .type(modeEnum)
-                        .dataFetcher(environment -> {
-                            try {
-                                return GtfsLibrary.getTraverseMode(((Stop) environment.getSource()).getVehicleType());
-                            } catch (IllegalArgumentException iae) {
-                                //If 'vehicleType' is not specified, guess vehicle mode from list of patterns
-                                return index.patternsForStop.get(environment.getSource())
-                                        .stream()
-                                        .map(pattern -> pattern.mode)
-                                        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
-                                        .entrySet()
-                                        .stream()
-                                        .max(Comparator.comparing(Map.Entry::getValue))
-                                        .map(e -> e.getKey())
-                                        .orElse(null);
-                            }
-                        })
+                        .dataFetcher(environment -> index.getVehicleMode(environment.getSource()))
+
+//                            try {
+//                                return GtfsLibrary.getTraverseMode(((Stop) environment.getSource()).getVehicleType());
+//                            } catch (IllegalArgumentException iae) {
+//                                //If 'vehicleType' is not specified, guess vehicle mode from list of patterns
+//                                return index.patternsForStop.get(environment.getSource())
+//                                        .stream()
+//                                        .map(pattern -> pattern.mode)
+//                                        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
+//                                        .entrySet()
+//                                        .stream()
+//                                        .max(Comparator.comparing(Map.Entry::getValue))
+//                                        .map(e -> e.getKey())
+//                                        .orElse(null);
+//                            }
+                        
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
                         .name("platformCode")
@@ -1091,7 +1237,7 @@ public class IndexGraphQLSchema {
                         .type(new GraphQLList(Scalars.GraphQLString))
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
-                        .name("cluster")
+                        .name("stopCluster")
                         .description("The cluster which this stop is part of")
                         .type(clusterType)
                         .dataFetcher(environment -> index.stopClusterForStop.get(environment.getSource()))
@@ -2779,13 +2925,13 @@ public class IndexGraphQLSchema {
                         .dataFetcher(environment -> index.patternForId.get(environment.getArgument("id")))
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
-                        .name("clusters")
+                        .name("stopClusters")
                         .description("Get all clusters")
                         .type(new GraphQLList(clusterType))
                         .dataFetcher(environment -> new ArrayList<>(index.stopClusterForId.values()))
                         .build())
                 .field(GraphQLFieldDefinition.newFieldDefinition()
-                        .name("cluster")
+                        .name("stopCluster")
                         .description("Get a single cluster based on its ID, i.e. value of field `gtfsId`")
                         .type(clusterType)
                         .argument(GraphQLArgument.newArgument()
