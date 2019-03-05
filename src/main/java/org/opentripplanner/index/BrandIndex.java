@@ -1,28 +1,34 @@
 package org.opentripplanner.index;
 
 
-import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.stream.Collectors;
 
 import org.opentripplanner.model.Brand;
 import org.opentripplanner.model.FeedScopedId;
-import org.opentripplanner.standalone.OTPMain;
+import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import ch.qos.logback.classic.Logger;
+
 public class BrandIndex {
 
-	//private final Map<List<String>, String> brandForOperatorIdPattern = Maps.newHashMap();
-	
-	private static final LinkedHashMap<String, String> brandForOperatorIdPattern = new LinkedHashMap<>();
+    private static final Logger LOG = (Logger) LoggerFactory.getLogger(BrandIndex.class);
 
-    public static final String BRANDS_FILENAME = "brands.json";
+	private final LinkedHashMap<String, String> brandForOperatorIdPattern = new LinkedHashMap<>();
 
-    static {
+    private final String routerConfig;
+
+	public BrandIndex(String _routerConfig) {
+		routerConfig = _routerConfig;
+	}
 		
+	public void buildBrandIndex() {
 		/*
 		 * Comentarios: El orden de la siguiente lista es importante: 
 		 * 
@@ -32,38 +38,37 @@ public class BrandIndex {
 		 * 2) El úlitmo elemento es el elemento por defecto. Si no se quieren introducir 
 		 *    todos los valores. 
 		 */
-//		JSONObject brandJson = new JSONObject();
-//
-//        brandJson.put("2:1.99", "Funicular");
-//        brandJson.put("2:1,2:E", "TMBMetro");
-//        brandJson.put("3:", "FGC");
-//        brandJson.put("TRAMBAIX:,TRAMBESÒS:", "Tram");
-//        brandJson.put("1071VC:", "Rodalies");
-//        brandJson.put("2:2,1:,22:,25:,28:,34:,35:,36:,44:,47:", "BusMetropolita");
-//        brandJson.put("AA:,AC:,AD:,AE:,AF:,AG:,AH:,AK:,AL:,AQ:,AT:,AV:,AW:,AY:,BA:,BB:,BC:,BD:,BE:,BJ:,BR:,BS:,BT:,BU:,BY:,CC:,CD:,CF:,CG:,CI:,CJ:,CK:,CS:,CU:,CW:,CY:,DA:,DD:,DF:,DH:,DI:,DM:,DP:,DQ:,DV:,DY:,EA:,EC:,ED:,EI:,EJ:,EL:,EM:,EN:,EO:,EP:,EQ:,ER:,ES:,ET:,EU:,EW:,EX:,EY:,EZ:,FA:,FB:,FC:,FD:,FE:,FG:,FH:,FI:,FJ:,FK:,FL:,FM:,FN:,FO:,FP:,FQ:,FR:,FS:,FT:,FV:,FW:,FX:,FY:,FZ:,GA:,GB:,GC:,GD:,GE:,GF:,GG:,GI:,GJ:,GK:,GL:,GM:,GN:,GW:,GX:,GZ:,HC:,HD:,HE:,HF:,HG:,L:,M:,O:,Q:,R:,Y:,Z:", "BusInterurba");
-
         ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        mapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
 
 		try {
-	        JsonNode brandsJson = OTPMain.loadJson(new File("C:\\Users\\Emovilitat\\Documents\\dvlp\\otp\\graph\\default", BRANDS_FILENAME));
-
-	        Collection<Brand> brands;
-	        
-			brands = Arrays.asList(mapper.readValue(brandsJson.toString(), Brand[].class));
-			
-			for (Brand brand : brands) {
-				String[] patterns = brand.getPattern().split(",");
-				for ( String pattern : patterns ) {
-					brandForOperatorIdPattern.put(pattern, brand.getId());
+			if (routerConfig != null) {
+				
+				JsonNode brandsJson = mapper.readTree(routerConfig).get("brands");
+				
+				if (brandsJson != null) {
+					Collection<Brand> brands;
+					
+					brands = Arrays.asList(mapper.readValue(brandsJson.toString(), Brand[].class));
+					
+					for (Brand brand : brands) {
+						String[] patterns = brand.getPattern().split(",");
+						for ( String pattern : patterns ) {
+							brandForOperatorIdPattern.put(pattern, brand.getId());
+						}
+					}
+					LOG.info("Loaded brands from routing parameters from JSON:" + brandForOperatorIdPattern.values().stream().distinct().collect(Collectors.toList()));
 				}
 			}
+			
 		} catch (Exception e) {
-			e.printStackTrace();
+			LOG.error("Error loading brands: " + e.getMessage());
 		}
 		
 	}
 
-	public static String getBrand(FeedScopedId feedScopeId) {
+	public String getBrand(FeedScopedId feedScopeId) {
 		
 		String brand = null;
 		
@@ -81,22 +86,11 @@ public class BrandIndex {
 		};
 		
 		if ( brand == null ){
-			brand = "BusInterurba";
+			brand = "none";
 		}
 		
 		return brand;
 		
 	}
 
-	
-	public static void main(String[] args) {
-		
-		BrandIndex brandIndex = new BrandIndex();
-		
-		String result = brandIndex.getBrand(new FeedScopedId("ATM", "ROD_50T0057R7"));
-		
-		System.out.println("Brand = "+ result);
-
-	}
-	
 }
