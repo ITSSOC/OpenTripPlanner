@@ -2666,6 +2666,7 @@ public class IndexGraphQLSchema {
                             List<FeedScopedId> filterByStops = null;
                             List<FeedScopedId> filterByRoutes = null;
                             List<String> filterByBikeRentalStations = null;
+                            
                             List<String> filterByBikeParks = null;
                             List<String> filterByCarParks = null;
                             @SuppressWarnings("rawtypes")
@@ -2788,11 +2789,6 @@ public class IndexGraphQLSchema {
                         .argument(GraphQLArgument.newArgument()
                                 .name("name")
                                 .description("Query routes by this name")
-                                .type(Scalars.GraphQLString)
-                                .build())
-                        .argument(GraphQLArgument.newArgument()
-                                .name("modes")
-                                .description("Deprecated, use argument `transportModes` instead.")
                                 .type(Scalars.GraphQLString)
                                 .build())
                         .argument(GraphQLArgument.newArgument()
